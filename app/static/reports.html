@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reports</title>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        color: #1a1a1a;
+        background: #f6f7f9;
+      }
+      body {
+        margin: 0;
+        padding: 1.5rem;
+      }
+      h1 {
+        margin: 0 0 1rem;
+        font-size: 1.5rem;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: flex-end;
+        margin-bottom: 1rem;
+        padding: 1rem;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        font-size: 0.8rem;
+        color: #555;
+      }
+      select,
+      button,
+      .btn {
+        font: inherit;
+        padding: 0.4rem 0.6rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+      button,
+      .btn {
+        cursor: pointer;
+        background: #2563eb;
+        color: #fff;
+        border-color: #2563eb;
+        text-decoration: none;
+        display: inline-block;
+        line-height: 1.4;
+      }
+      button.secondary {
+        background: #fff;
+        color: #2563eb;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .meta {
+        margin-bottom: 0.75rem;
+        font-size: 0.9rem;
+        color: #555;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+      th,
+      td {
+        padding: 0.6rem 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid #eee;
+      }
+      th {
+        background: #f0f2f5;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .amount {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .error {
+        color: #b91c1c;
+        margin-bottom: 1rem;
+      }
+      .pager {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        align-items: center;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Reports</h1>
+
+    <form class="toolbar" id="filters">
+      <label>
+        Status
+        <select name="status" id="status">
+          <option value="">All</option>
+          <option value="pending">pending</option>
+          <option value="approved">approved</option>
+          <option value="rejected">rejected</option>
+          <option value="archived">archived</option>
+        </select>
+      </label>
+      <label>
+        Sort by
+        <select name="sort" id="sort">
+          <option value="created_at">created_at</option>
+          <option value="id">id</option>
+          <option value="title">title</option>
+          <option value="status">status</option>
+          <option value="owner">owner</option>
+          <option value="amount">amount</option>
+        </select>
+      </label>
+      <label>
+        Order
+        <select name="descending" id="descending">
+          <option value="true">Newest / high first</option>
+          <option value="false">Oldest / low first</option>
+        </select>
+      </label>
+      <label>
+        Page size
+        <select name="limit" id="limit">
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </label>
+      <button type="submit">Apply</button>
+      <a class="btn" id="export" href="/reports.csv">Export current page (CSV)</a>
+    </form>
+
+    <p class="meta" id="meta"></p>
+    <p class="error" id="error" hidden></p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Title</th>
+          <th>Status</th>
+          <th>Owner</th>
+          <th class="amount">Amount</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <div class="pager">
+      <button type="button" class="secondary" id="prev" disabled>Previous</button>
+      <button type="button" class="secondary" id="next" disabled>Next</button>
+    </div>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      let offset = Number(params.get("offset") || 0);
+
+      const els = {
+        status: document.getElementById("status"),
+        sort: document.getElementById("sort"),
+        descending: document.getElementById("descending"),
+        limit: document.getElementById("limit"),
+        rows: document.getElementById("rows"),
+        meta: document.getElementById("meta"),
+        error: document.getElementById("error"),
+        export: document.getElementById("export"),
+        prev: document.getElementById("prev"),
+        next: document.getElementById("next"),
+      };
+
+      function readFilters() {
+        return {
+          status: els.status.value,
+          sort: els.sort.value,
+          descending: els.descending.value,
+          limit: els.limit.value,
+          offset: String(offset),
+        };
+      }
+
+      function queryString(overrides = {}) {
+        const q = new URLSearchParams();
+        const f = { ...readFilters(), ...overrides };
+        if (f.status) q.set("status", f.status);
+        q.set("sort", f.sort);
+        q.set("descending", f.descending);
+        q.set("limit", f.limit);
+        q.set("offset", f.offset);
+        return q.toString();
+      }
+
+      function syncExportLink() {
+        els.export.href = `/reports.csv?${queryString()}`;
+      }
+
+      function applyUrlState() {
+        if (params.get("status")) els.status.value = params.get("status");
+        if (params.get("sort")) els.sort.value = params.get("sort");
+        if (params.get("descending")) els.descending.value = params.get("descending");
+        if (params.get("limit")) els.limit.value = params.get("limit");
+        offset = Number(params.get("offset") || 0);
+      }
+
+      function pushUrlState() {
+        const qs = queryString();
+        history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+        syncExportLink();
+      }
+
+      async function loadReports() {
+        els.error.hidden = true;
+        syncExportLink();
+        const res = await fetch(`/reports?${queryString()}`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          els.error.textContent = body.detail || res.statusText;
+          els.error.hidden = false;
+          els.rows.innerHTML = "";
+          return;
+        }
+        const data = await res.json();
+        const limit = Number(els.limit.value);
+        const start = data.offset + 1;
+        const end = data.offset + data.items.length;
+
+        els.meta.textContent =
+          data.items.length === 0
+            ? `No reports match (${data.total} total)`
+            : `Showing ${start}–${end} of ${data.total} — Export downloads this page only`;
+
+        els.rows.innerHTML = data.items
+          .map(
+            (r) => `<tr>
+          <td>${r.id}</td>
+          <td>${escapeHtml(r.title)}</td>
+          <td>${r.status}</td>
+          <td>${escapeHtml(r.owner)}</td>
+          <td class="amount">${r.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+          <td>${new Date(r.created_at).toLocaleString()}</td>
+        </tr>`
+          )
+          .join("");
+
+        els.prev.disabled = data.offset <= 0;
+        els.next.disabled = data.offset + limit >= data.total;
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      document.getElementById("filters").addEventListener("submit", (e) => {
+        e.preventDefault();
+        offset = 0;
+        pushUrlState();
+        loadReports();
+      });
+
+      els.prev.addEventListener("click", () => {
+        offset = Math.max(0, offset - Number(els.limit.value));
+        pushUrlState();
+        loadReports();
+      });
+
+      els.next.addEventListener("click", () => {
+        offset += Number(els.limit.value);
+        pushUrlState();
+        loadReports();
+      });
+
+      applyUrlState();
+      syncExportLink();
+      loadReports();
+    </script>
+  </body>
+</html>
